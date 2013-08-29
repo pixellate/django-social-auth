@@ -16,6 +16,8 @@ from django.views.decorators.csrf import csrf_exempt
 from social_auth.utils import sanitize_redirect, setting, \
                               backend_setting, clean_partial_pipeline
 from social_auth.decorators import dsa_view, disconnect_view
+from lazysignup.utils import is_lazy_user
+
 
 
 DEFAULT_REDIRECT = setting('SOCIAL_AUTH_LOGIN_REDIRECT_URL',
@@ -35,7 +37,7 @@ def auth(request, backend):
 def complete(request, backend, *args, **kwargs):
     """Authentication complete view, override this view if transaction
     management doesn't suit your needs."""
-    if request.user.is_authenticated():
+    if request.user.is_authenticated() and not is_lazy_user(request.user):
         return associate_complete(request, backend, *args, **kwargs)
     else:
         return complete_process(request, backend, *args, **kwargs)
@@ -117,6 +119,10 @@ def complete_process(request, backend, *args, **kwargs):
         if getattr(user, 'is_active', True):
             # catch is_new flag before login() might reset the instance
             is_new = getattr(user, 'is_new', False)
+            # Pop user id from session in order to prevent session
+            # reset when user who is logged in changes
+            if is_lazy_user(request.user):
+                request.session.pop('_auth_user_id', None)
             login(request, user)
             # user.social_user is the used UserSocialAuth instance defined
             # in authenticate process
